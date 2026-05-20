@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BlockTrace Issue Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        /* Custom styles for better dark mode look and scrollbar */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* slate-900 fallback */
+        }
+        .modal-content {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        /* Custom scrollbar for better look in dark theme */
+        .max-h-64::-webkit-scrollbar {
+            width: 6px;
+        }
+        .max-h-64::-webkit-scrollbar-thumb {
+            background-color: #4f46e5; /* indigo-600 */
+            border-radius: 3px;
+        }
+        .max-h-64::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback } = React;
+
+    // --- Icon Definitions (Lucide-React replacements for CDN use) ---
+const Icon = ({ children, className = '', size = 24 }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        {children}
+    </svg>
+);
+
+const Search = (props) => <Icon {...props}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Icon>;
+const Plus = (props) => <Icon {...props}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>;
+// CORRECTED LINE: The closing tag must be </Icon>
+const Check = (props) => <Icon {...props}><polyline points="20 6 9 17 4 12"/></Icon>;
+const Clock = (props) => <Icon {...props}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>;
+const AlertCircle = (props) => <Icon {...props}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></Icon>;
+const User = (props) => <Icon {...props}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon>;
+const MessageSquare = (props) => <Icon {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></Icon>;
+const Users = (props) => <Icon {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>;
+const LogOut = (props) => <Icon {...props}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></Icon>;
+const Menu = (props) => <Icon {...props}><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></Icon>;
+const X = (props) => <Icon {...props}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>;
+const Bell = (props) => <Icon {...props}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></Icon>;
+const DollarSign = (props) => <Icon {...props}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></Icon>;
+const ThumbsUp = (props) => <Icon {...props}><path d="M7 10v12h11.2a2.3 2.3 0 0 0 2.3-2.3v-2.3a2 2 0 0 0-2-2h-6.2l.2-1.3c.2-.5 1-1 2.2-1"/><path d="M15.5 10v-3.5a2.5 2.5 0 0 0-2.5-2.5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3"/></Icon>;
+const ClipboardList = (props) => <Icon {...props}><rect x="9" y="3" width="7" height="4" rx="1"/><path d="M10 21h4c2.2 0 4-1.8 4-4v-7c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v7c0 2.2 1.8 4 4 4z"/><line x1="10" y1="13" x2="14" y2="13"/></Icon>;
+// --- End Icon Definitions ---
+
+    // --- Mock Data ---
+    const initialUsers = [
+      { id: 1, name: 'Bhavana', email: 'bhavana@gmail.com', role: 'Developer', avatar: 'RB', wallet: '0x1A2b...7c8d' },
+      { id: 2, name: 'Dhatri', email: 'dhatri@gmail.com', role: 'Tester', avatar: 'MD', wallet: '0x9E0f...2a3b' },
+      { id: 3, name: 'Amulya', email: 'amulya@gmail.com', role: 'Project Manager', avatar: 'BA', wallet: '0x4F5g...6h7i' },
+      { id: 4, name: 'Mahitha', email: 'mahitha@gmail.com', role: 'Admin', avatar: 'VM', wallet: '0x0P1q...8r9s' },
+      { id: 5, name: 'kento yamazaki', email: 'kento@gmail.com.com', role: 'Developer', avatar: 'KY', wallet: '0x2U3v...4w5x' },
+    ];
+
+    const initialIssues = [
+      {
+        id: 1,
+        title: 'Login page not responsive on mobile',
+        description: 'The login button overlaps with input fields on iPhone 12',
+        reportedBy: 2,
+        assignedTo: 1,
+        status: 'In Progress',
+        priority: 'High',
+        type: 'Bug',
+        createdAt: new Date(2025, 9, 15),
+        updatedAt: new Date(2025, 9, 20),
+        votes: 5,
+        votedBy: [1, 3],
+        bounty: 10, // Simulated token reward
+        comments: [
+          { id: 1, userId: 1, text: 'Working on the CSS fix', timestamp: new Date(2025, 9, 16) },
+          { id: 2, userId: 2, text: 'Please prioritize this', timestamp: new Date(2025, 9, 17) }
+        ]
+      },
+      {
+        id: 2,
+        title: 'Implement system-wide dark mode toggle',
+        description: 'This feature will greatly improve night-time use.',
+        reportedBy: 3,
+        assignedTo: null,
+        status: 'Pending',
+        priority: 'Medium',
+        type: 'Feature',
+        createdAt: new Date(2025, 9, 18),
+        updatedAt: new Date(2025, 9, 18),
+        votes: 25,
+        votedBy: [1, 2, 3, 4, 5],
+        bounty: 0,
+        comments: []
+      },
+      {
+        id: 3,
+        title: 'Database connection timeout',
+        description: 'Users experience timeout errors during peak hours',
+        reportedBy: 2,
+        assignedTo: 5,
+        status: 'Closed',
+        priority: 'Critical',
+        type: 'Bug',
+        createdAt: new Date(2025, 9, 10),
+        updatedAt: new Date(2025, 9, 22),
+        votes: 12,
+        votedBy: [2, 5],
+        bounty: 50,
+        comments: [
+          { id: 1, userId: 5, text: 'Optimized connection pool, verified fix on staging.', timestamp: new Date(2025, 9, 21) },
+        ]
+      }
+    ];
+
+    // --- Helper Functions ---
+
+    const getStatusColor = (status) => {
+        const colors = {
+            'Open': 'bg-blue-500',
+            'In Progress': 'bg-yellow-500',
+            'Resolved': 'bg-green-500',
+            'Closed': 'bg-gray-500',
+            'Pending': 'bg-indigo-500',
+            'Approved': 'bg-teal-500'
+        };
+        return colors[status] || 'bg-gray-500';
+    };
+
+    const getPriorityColor = (priority) => {
+        const colors = {
+            'Low': 'text-green-400',
+            'Medium': 'text-yellow-400',
+            'High': 'text-orange-400',
+            'Critical': 'text-red-400'
+        };
+        return colors[priority] || 'text-gray-400';
+    };
+
+    // --- Core Components ---
+
+    const StatCard = ({ title, value, icon, color }) => (
+        <div className={`bg-gradient-to-br from-${color}-500/20 to-${color}-600/20 backdrop-blur-sm border border-${color}-500/30 rounded-xl p-6 shadow-lg`}>
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className={`text-${color}-300 text-sm font-medium`}>{title}</p>
+                    <p className="text-3xl font-bold text-white mt-1">{value}</p>
+                </div>
+                <div className={`text-${color}-400 opacity-50`}>
+                    {React.cloneElement(icon, { className: 'w-12 h-12' })}
+                </div>
+            </div>
+        </div>
+    );
+
+    const FilterBar = ({ searchTerm, setSearchTerm, filterStatus, setFilterStatus, filterPriority, setFilterPriority }) => (
+        <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-4 shadow-xl">
+            <div className="flex flex-wrap gap-4 items-center">
+                <div className="flex-1 min-w-64">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search issues..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full bg-white/10 border border-white/20 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
+                        />
+                    </div>
+                </div>
+
+                <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                >
+                    <option value="All" className="bg-gray-800">All Status</option>
+                    {['Open', 'Pending', 'In Progress', 'Approved', 'Resolved', 'Closed'].map(s => <option key={s} value={s} className="bg-gray-800">{s}</option>)}
+                </select>
+
+                <select
+                    value={filterPriority}
+                    onChange={(e) => setFilterPriority(e.target.value)}
+                    className="bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                >
+                    <option value="All" className="bg-gray-800">All Priority</option>
+                    {['Low', 'Medium', 'High', 'Critical'].map(p => <option key={p} value={p} className="bg-gray-800">{p}</option>)}
+                </select>
+            </div>
+        </div>
+    );
+
+    const Modal = ({ children, onClose, large }) => (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6 z-50" onClick={onClose}>
+            <div
+                className={`modal-content bg-slate-900 border border-white/20 rounded-2xl p-8 ${large ? 'max-w-3xl' : 'max-w-2xl'} w-full max-h-[90vh] overflow-y-auto`}
+                onClick={(e) => e.stopPropagation()}
+            >
+                {children}
+            </div>
+        </div>
+    );
+
+    // --- Page Components ---
+
+    const HomePage = ({ stats, setCurrentView }) => (
+        <div className="space-y-10 text-center pt-10">
+            <div className="max-w-3xl mx-auto">
+                <h2 className="text-5xl font-extrabold text-white mb-4">Welcome to <span className="text-blue-400">BlockTrace</span></h2>
+                <p className="text-xl text-gray-300">
+                    The fully decentralized, immutable issue tracker. Every report, comment, and fix is recorded on a transparent blockchain ledger, ensuring permanent, tamper-proof contribution tracking.
+                </p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto">
+                <StatCard title="Total Issues" value={stats.total} icon={<AlertCircle />} color="blue" />
+                <StatCard title="Active Contributors" value={stats.contributors} icon={<Users />} color="purple" />
+                <StatCard title="Total Bounty Value" value={`${stats.totalBounties} Tokens`} icon={<DollarSign />} color="yellow" />
+                <StatCard title="Closed Issues" value={stats.closed} icon={<Check />} color="green" />
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-center gap-6 pt-6">
+                <button
+                    onClick={() => {
+                        setCurrentView('dashboard');
+                        document.querySelector('#new-issue-btn')?.click(); // Try to click the dashboard's new issue button
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold px-8 py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-xl"
+                >
+                    <AlertCircle className="w-6 h-6" />
+                    Report a Bug
+                </button>
+                <button
+                    onClick={() => {
+                        setCurrentView('features');
+                        document.querySelector('#new-feature-btn')?.click(); // Try to click the features' new feature button
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700 text-white text-lg font-semibold px-8 py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-xl"
+                >
+                    <Plus className="w-6 h-6" />
+                    Suggest a Feature
+                </button>
+            </div>
+        </div>
+    );
+
+    const CommunityPage = ({ users, issues }) => {
+        const contributorStats = useMemo(() => {
+            const stats = {};
+            users.forEach(user => {
+                stats[user.id] = { reported: 0, assigned: 0, closed: 0 };
+            });
+            issues.forEach(issue => {
+                if (issue.reportedBy) stats[issue.reportedBy].reported++;
+                if (issue.assignedTo) stats[issue.assignedTo].assigned++;
+                if (issue.status === 'Closed') {
+                    if (issue.assignedTo) stats[issue.assignedTo].closed++;
+                    // Also credit reporter if they are the only contributor
+                    if (!issue.assignedTo && issue.reportedBy) stats[issue.reportedBy].closed++;
+                }
+            });
+            return users.map(user => ({
+                ...user,
+                ...stats[user.id],
+                totalContributions: stats[user.id].reported + stats[user.id].closed
+            })).sort((a, b) => b.totalContributions - a.totalContributions);
+        }, [users, issues]);
+
+        const getBadge = (contributions) => {
+            if (contributions >= 5) return { name: 'Top Hunter', color: 'bg-yellow-500' };
+            if (contributions >= 3) return { name: 'Fixer', color: 'bg-green-500' };
+            if (contributions >= 1) return { name: 'Reporter', color: 'bg-blue-500' };
+            return null;
+        };
+
+        return (
+            <div className="space-y-6">
+                <h2 className="text-3xl font-bold text-white mb-4 border-b border-white/10 pb-4">Community / Contributors</h2>
+                <p className="text-gray-400">Tracking contributions on the immutable BlockTrace ledger.</p>
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 shadow-lg">
+                    <h3 className="text-xl font-semibold text-white mb-4">Leaderboard</h3>
+                    <div className="space-y-4">
+                        {contributorStats.map((user, index) => {
+                            const badge = getBadge(user.totalContributions);
+                            return (
+                                <div key={user.id} className="flex items-center justify-between bg-white/5 p-4 rounded-lg border border-white/5">
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-xl font-bold text-blue-400 w-6">{index + 1}.</span>
+                                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
+                                            {user.avatar}
+                                        </div>
+                                        <div>
+                                            <p className="text-white font-medium">{user.name} <span className="text-xs text-gray-400">({user.role})</span></p>
+                                            <p className="text-xs font-mono text-gray-400 break-all">{user.wallet}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right flex items-center gap-4">
+                                        {badge && (
+                                            <span className={`px-3 py-1 text-xs font-bold text-white rounded-full ${badge.color}`}>
+                                                {badge.name}
+                                            </span>
+                                        )}
+                                        <div className="w-20">
+                                            <p className="text-white font-semibold">{user.totalContributions}</p>
+                                            <p className="text-sm text-gray-400">Total Contrib.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const MyContributionsPage = ({ currentUser, issues, onSelectIssue, getUserById }) => {
+        const myIssues = useMemo(() => {
+            if (!currentUser) return [];
+            return issues.filter(issue => 
+                issue.reportedBy === currentUser.id || 
+                issue.assignedTo === currentUser.id
+            ).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        }, [issues, currentUser]);
+
+        if (!currentUser) {
+            return <p className="text-red-400">Please log in to view your contributions.</p>;
+        }
+
+        return (
+            <div className="space-y-6">
+                <h2 className="text-3xl font-bold text-white mb-4 border-b border-white/10 pb-4">My Contributions</h2>
+
+                <div className="space-y-4">
+                    {myIssues.map(issue => (
+                        <div
+                            key={issue.id}
+                            className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 hover:border-blue-500/50 transition-all cursor-pointer"
+                            onClick={() => onSelectIssue(issue)}
+                        >
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <span className="text-blue-400 font-mono text-sm">#{issue.id}</span>
+                                        <div className={`${getStatusColor(issue.status)} px-3 py-1 rounded-full text-xs font-medium text-white`}>
+                                            {issue.status}
+                                        </div>
+                                        {issue.reportedBy === currentUser.id && (
+                                            <span className="text-blue-300 font-medium text-xs border border-blue-500/50 px-2 py-0.5 rounded">REPORTED</span>
+                                        )}
+                                        {issue.assignedTo === currentUser.id && issue.status !== 'Closed' && (
+                                            <span className="text-yellow-300 font-medium text-xs border border-yellow-500/50 px-2 py-0.5 rounded">ASSIGNED</span>
+                                        )}
+                                        <span className={`${getPriorityColor(issue.priority)} font-medium text-sm`}>
+                                            {issue.priority}
+                                        </span>
+                                    </div>
+
+                                    <h3 className="text-xl font-semibold text-white mb-2">{issue.title}</h3>
+                                    <p className="text-gray-300 mb-4 truncate w-full max-w-xl">{issue.description.substring(0, 120)}...</p>
+
+                                    <div className="flex flex-wrap items-center gap-6 text-sm text-gray-400">
+                                        <div className="flex items-center gap-2">
+                                            <DollarSign className="w-4 h-4 text-yellow-400" />
+                                            <span>Bounty: {issue.bounty || 0}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <ThumbsUp className="w-4 h-4" />
+                                            <span>{issue.votes} votes</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {myIssues.length === 0 && (
+                        <div className="text-center py-12">
+                            <ClipboardList className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                            <p className="text-gray-400 text-lg">You haven't reported or been assigned to any issues yet.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+
+    // --- Main BlockTrace Component ---
+
+    const BlockTrace = () => {
+      const [currentView, setCurrentView] = useState('login');
+      const [currentUser, setCurrentUser] = useState(null);
+      const [issues, setIssues] = useState(initialIssues);
+      const [users, setUsers] = useState(initialUsers);
+      const [filteredIssues, setFilteredIssues] = useState(initialIssues);
+      const [searchTerm, setSearchTerm] = useState('');
+      const [filterStatus, setFilterStatus] = useState('All');
+      const [filterPriority, setFilterPriority] = useState('All');
+      const [selectedIssue, setSelectedIssue] = useState(null);
+      const [showReportModal, setShowReportModal] = useState(false);
+      const [sidebarOpen, setSidebarOpen] = useState(false);
+      const [newIssue, setNewIssue] = useState({
+        title: '',
+        description: '',
+        type: 'Bug',
+        priority: 'Medium',
+        bounty: 5 // Default bounty for bugs
+      });
+      const [signupData, setSignupData] = useState({
+        name: '',
+        email: '',
+        password: '',
+        role: 'Developer'
+      });
+      const [loginEmail, setLoginEmail] = useState('');
+
+
+      // Helper to get user by ID
+      const getUserById = useCallback((id) => users.find(u => u.id === id), [users]);
+
+      useEffect(() => {
+        let filtered = issues;
+
+        if (searchTerm) {
+          filtered = filtered.filter(issue =>
+            issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            issue.description.toLowerCase().includes(searchTerm.toLowerCase())
+          );
+        }
+
+        if (filterStatus !== 'All') {
+          filtered = filtered.filter(issue => issue.status === filterStatus);
+        }
+
+        if (filterPriority !== 'All') {
+          filtered = filtered.filter(issue => issue.priority === filterPriority);
+        }
+
+        setFilteredIssues(filtered);
+      }, [searchTerm, filterStatus, filterPriority, issues]);
+
+      const handleLogin = () => {
+        const user = users.find(u => u.email === loginEmail);
+        if (user) {
+          setCurrentUser(user);
+          setCurrentView('home');
+          setLoginEmail('');
+        } else {
+            console.error("Login failed: User not found.");
+        }
+      };
+
+      const handleSignup = () => {
+        const newUserObj = {
+          id: users.length + 1,
+          name: signupData.name,
+          email: signupData.email,
+          role: signupData.role,
+          avatar: signupData.name.split(' ').map(n => n[0]).join('').toUpperCase(),
+          wallet: '0xNew' + Math.random().toString(16).substr(2, 6) + '...'
+        };
+        setUsers(prevUsers => [...prevUsers, newUserObj]);
+        setCurrentUser(newUserObj);
+        setCurrentView('home');
+        setSignupData({ name: '', email: '', password: '', role: 'Developer' });
+      };
+
+      const handleLogout = () => {
+        setCurrentUser(null);
+        setCurrentView('login');
+      };
+
+      const handleCreateIssue = () => {
+        const issue = {
+          id: issues.length + 1,
+          ...newIssue,
+          reportedBy: currentUser.id,
+          assignedTo: null,
+          status: newIssue.type === 'Bug' ? 'Open' : 'Pending',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          votes: 0,
+          votedBy: [],
+          bounty: newIssue.type === 'Feature' ? 0 : parseInt(newIssue.bounty) || 0, // Ensure bounty is 0 for features or use the input value
+          comments: []
+        };
+
+        setIssues(prevIssues => [issue, ...prevIssues]);
+        setShowReportModal(false);
+        setNewIssue({ title: '', description: '', type: 'Bug', priority: 'Medium', bounty: 5 });
+        setCurrentView('dashboard');
+      };
+
+      const handleUpdateIssueStatus = (issueId, newStatus) => {
+        setIssues(prevIssues => prevIssues.map(issue =>
+          issue.id === issueId
+            ? { ...issue, status: newStatus, updatedAt: new Date() }
+            : issue
+        ));
+        if(selectedIssue && selectedIssue.id === issueId) {
+             setSelectedIssue(prevIssue => ({ ...prevIssue, status: newStatus, updatedAt: new Date() }));
+        }
+      };
+
+      const handleAssignIssue = (issueId, userId) => {
+        setIssues(prevIssues => prevIssues.map(issue =>
+          issue.id === issueId
+            ? { ...issue, assignedTo: userId, status: 'In Progress', updatedAt: new Date() }
+            : issue
+        ));
+        if(selectedIssue && selectedIssue.id === issueId) {
+             setSelectedIssue(prevIssue => ({ ...prevIssue, assignedTo: userId, status: 'In Progress', updatedAt: new Date() }));
+        }
+      };
+
+      const handleAddComment = (issueId, commentText) => {
+        setIssues(prevIssues => prevIssues.map(issue =>
+          issue.id === issueId
+            ? {
+                ...issue,
+                comments: [...issue.comments, {
+                  id: issue.comments.length + 1,
+                  userId: currentUser.id,
+                  text: commentText,
+                  timestamp: new Date()
+                }],
+                updatedAt: new Date()
+              }
+            : issue
+        ));
+        setSelectedIssue(prevIssue => ({
+            ...prevIssue,
+            comments: [...prevIssue.comments, {
+                id: prevIssue.comments.length + 1,
+                userId: currentUser.id,
+                text: commentText,
+                timestamp: new Date()
+            }],
+            updatedAt: new Date()
+        }));
+      };
+
+      const handleVote = (issueId) => {
+          if (!currentUser) return;
+
+          setIssues(prevIssues => prevIssues.map(issue => {
+              if (issue.id === issueId) {
+                  const alreadyVoted = issue.votedBy.includes(currentUser.id);
+                  if (alreadyVoted) {
+                      return {
+                          ...issue,
+                          votes: issue.votes - 1,
+                          votedBy: issue.votedBy.filter(id => id !== currentUser.id),
+                      };
+                  } else {
+                      return {
+                          ...issue,
+                          votes: issue.votes + 1,
+                          votedBy: [...issue.votedBy, currentUser.id],
+                      };
+                  }
+              }
+              return issue;
+          }));
+          if (selectedIssue && selectedIssue.id === issueId) {
+              const alreadyVoted = selectedIssue.votedBy.includes(currentUser.id);
+              if (alreadyVoted) {
+                  setSelectedIssue(prev => ({ ...prev, votes: prev.votes - 1, votedBy: prev.votedBy.filter(id => id !== currentUser.id) }));
+              } else {
+                  setSelectedIssue(prev => ({ ...prev, votes: prev.votes + 1, votedBy: [...prev.votedBy, currentUser.id] }));
+              }
+          }
+      };
+
+      const handleCloseIssue = (issueId) => {
+         handleUpdateIssueStatus(issueId, 'Closed');
+      };
+
+
+      // Aggregate Stats
+      const stats = useMemo(() => {
+        const resolvedBugs = issues.filter(i => i.type === 'Bug' && i.status === 'Resolved').length;
+        const totalBounties = issues.reduce((sum, i) => sum + (i.bounty || 0), 0);
+        const highestVoted = issues.reduce((max, i) => (i.votes > max.votes ? i : max), { votes: 0 });
+
+        return {
+          total: issues.length,
+          open: issues.filter(i => i.status === 'Open' || i.status === 'Pending').length,
+          closed: issues.filter(i => i.status === 'Closed').length,
+          openBugs: issues.filter(i => i.type === 'Bug' && i.status === 'Open').length,
+          resolvedBugs,
+          totalBounties,
+          highestVoted,
+          contributors: new Set(issues.map(i => i.reportedBy).concat(issues.map(i => i.assignedTo))).size,
+        };
+      }, [issues]);
+
+      // --- UI Renderers ---
+
+      const IssueList = ({ issues, onSelectIssue, showVoting = false }) => (
+        <div className="space-y-4">
+            {issues.map(issue => (
+                <div
+                    key={issue.id}
+                    className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 hover:border-blue-500/50 transition-all cursor-pointer"
+                    onClick={() => onSelectIssue(issue)}
+                >
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                                <span className="text-blue-400 font-mono text-sm">#{issue.id}</span>
+                                <div className={`${getStatusColor(issue.status)} px-3 py-1 rounded-full text-xs font-medium text-white`}>
+                                    {issue.status}
+                                </div>
+                                <span className={`${getPriorityColor(issue.priority)} font-medium text-sm`}>
+                                    {issue.priority}
+                                </span>
+                                {issue.bounty > 0 && (
+                                    <span className="text-yellow-400 text-sm font-medium flex items-center gap-1">
+                                        <DollarSign className="w-4 h-4"/> Bounty: {issue.bounty}
+                                    </span>
+                                )}
+                            </div>
+
+                            <h3 className="text-xl font-semibold text-white mb-2">{issue.title}</h3>
+                            <p className="text-gray-300 mb-4 truncate w-full max-w-xl">{issue.description.substring(0, 120)}...</p>
+
+                            <div className="flex flex-wrap items-center gap-6 text-sm text-gray-400">
+                                <div className="flex items-center gap-2">
+                                    <User className="w-4 h-4" />
+                                    <span>Reported: {getUserById(issue.reportedBy)?.name}</span>
+                                </div>
+                                {issue.assignedTo && (
+                                    <div className="flex items-center gap-2">
+                                        <User className="w-4 h-4" />
+                                        <span>Assigned: {getUserById(issue.assignedTo)?.name}</span>
+                                    </div>
+                                )}
+                                <div className="flex items-center gap-2">
+                                    <MessageSquare className="w-4 h-4" />
+                                    <span>{issue.comments.length} comments</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                            {/* Voting System */}
+                            {showVoting && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleVote(issue.id); }}
+                                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-all ${issue.votedBy.includes(currentUser?.id) ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/10 text-blue-300 hover:bg-white/20'}`}
+                                    disabled={!currentUser}
+                                >
+                                    <ThumbsUp className="w-4 h-4" />
+                                    {issue.votes} Votes
+                                </button>
+                            )}
+
+                            {/* Developer Action */}
+                            {currentUser?.role === 'Developer' && issue.assignedTo === currentUser.id && issue.status !== 'Closed' && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUpdateIssueStatus(issue.id, issue.status === 'Open' ? 'In Progress' : (issue.status === 'In Progress' ? 'Resolved' : 'Closed'));
+                                    }}
+                                    className="bg-green-500/20 hover:bg-green-500/30 text-green-300 px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap"
+                                >
+                                    {issue.status === 'Open' ? 'Start Work' : (issue.status === 'In Progress' ? 'Mark Resolved' : 'Verify & Close')}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            ))}
+
+            {issues.length === 0 && (
+                <div className="text-center py-12">
+                    <AlertCircle className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                    <p className="text-gray-400 text-lg">No issues found matching the criteria.</p>
+                </div>
+            )}
+        </div>
+      );
+
+      // Dashboard View
+      const renderDashboard = () => (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <h2 className="text-3xl font-bold text-white">Issue Dashboard</h2>
+            <button
+              id="new-issue-btn"
+              onClick={() => {setNewIssue(prev => ({ ...prev, type: 'Bug', bounty: 5 })); setShowReportModal(true);}}
+              className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"
+            >
+              <Plus className="w-5 h-5" />
+              Report Bug
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard title="Total" value={stats.total} icon={<AlertCircle />} color="blue" />
+            <StatCard title="Open/Pending" value={stats.open} icon={<Clock />} color="yellow" />
+            <StatCard title="Resolved" value={stats.resolvedBugs} icon={<Check />} color="green" />
+            <StatCard title="Bounty Value" value={`${stats.totalBounties} Tokens`} icon={<DollarSign />} color="purple" />
+          </div>
+          <FilterBar
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            filterStatus={filterStatus}
+            setFilterStatus={setFilterStatus}
+            filterPriority={filterPriority}
+            setFilterPriority={setFilterPriority}
+          />
+          <IssueList
+            issues={filteredIssues.filter(i => i.type === 'Bug')}
+            onSelectIssue={setSelectedIssue}
+            showVoting={currentUser?.role !== 'Developer'}
+          />
+        </div>
+      );
+
+      // Features Page
+      const renderFeaturesPage = () => (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+                <h2 className="text-3xl font-bold text-white">Feature Suggestions (Vote!)</h2>
+                <button
+                    id="new-feature-btn"
+                    onClick={() => { setNewIssue(prev => ({ ...prev, type: 'Feature', bounty: 0 })); setShowReportModal(true); }}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"
+                >
+                    <Plus className="w-5 h-5" />
+                    Suggest Feature
+                </button>
+            </div>
+            <p className="text-gray-400">Vote on the features you want implemented next. One vote per user per item.</p>
+            <IssueList
+                issues={filteredIssues.filter(i => i.type === 'Feature').sort((a, b) => b.votes - a.votes)}
+                onSelectIssue={setSelectedIssue}
+                showVoting={true}
+            />
+        </div>
+      );
+
+      const renderContent = () => {
+        if (currentView === 'login' || currentView === 'signup') return null;
+
+        switch (currentView) {
+            case 'home':
+                return <HomePage stats={stats} setCurrentView={setCurrentView} />;
+            case 'dashboard':
+                return renderDashboard();
+            case 'features':
+                return renderFeaturesPage();
+            case 'community':
+                return <CommunityPage users={users} issues={issues} getUserById={getUserById} />;
+            case 'contributions':
+                return <MyContributionsPage currentUser={currentUser} issues={issues} onSelectIssue={setSelectedIssue} getUserById={getUserById} />;
+            default:
+                return renderDashboard();
+        }
+      };
+
+      if (currentView === 'login') {
+         return (
+          <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 flex items-center justify-center p-6">
+            <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <AlertCircle className="w-8 h-8 text-white" />
+                </div>
+                <h1 className="text-3xl font-bold text-white mb-2">BlockTrace</h1>
+                <p className="text-blue-200">Issue Tracking System</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">Wallet Address or Email</label>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+                    placeholder="bhavana@gmail.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">Password (Simulated)</label>
+                  <input
+                    type="password"
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+                    placeholder="Enter your password"
+                  />
+                </div>
+
+                <button
+                  onClick={handleLogin}
+                  className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-lg"
+                >
+                  Login / Connect Wallet
+                </button>
+
+                <button
+                  onClick={() => setCurrentView('signup')}
+                  className="w-full bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-medium transition-all"
+                >
+                  Sign Up
+                </button>
+              </div>
+
+              
+            </div>
+          </div>
+        );
+      }
+
+      if (currentView === 'signup') {
+          return (
+          <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 flex items-center justify-center p-6">
+            <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+              <div className="text-center mb-8">
+                <h1 className="text-3xl font-bold text-white mb-2">Create Account</h1>
+                <p className="text-blue-200">Join BlockTrace</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">Full Name</label>
+                  <input
+                    type="text"
+                    value={signupData.name}
+                    onChange={(e) => setSignupData({...signupData, name: e.target.value})}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+                    placeholder="Bhavana"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={signupData.email}
+                    onChange={(e) => setSignupData({...signupData, email: e.target.value})}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+                    placeholder="bhavana@gmail.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">Password</label>
+                  <input
+                    type="password"
+                    value={signupData.password}
+                    onChange={(e) => setSignupData({...signupData, password: e.target.value})}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+                    placeholder="Enter password"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">Role</label>
+                  <select
+                    value={signupData.role}
+                    onChange={(e) => setSignupData({...signupData, role: e.target.value})}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400"
+                  >
+                    <option value="Developer" className="bg-gray-800">Developer</option>
+                    <option value="Tester" className="bg-gray-800">Tester</option>
+                    <option value="Project Manager" className="bg-gray-800">Project Manager</option>
+                    <option value="Admin" className="bg-gray-800">Admin</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleSignup}
+                  disabled={!signupData.name || !signupData.email || !signupData.password}
+                  className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-all disabled:cursor-not-allowed shadow-lg"
+                >
+                  Create Account
+                </button>
+
+                <button
+                  onClick={() => setCurrentView('login')}
+                  className="w-full bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-medium transition-all"
+                >
+                  Back to Login
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+          {/* Header */}
+          <header className="bg-black/30 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
+            <div className="max-w-7xl mx-auto px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCurrentView('home')}>
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center shadow-lg">
+                          <AlertCircle className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h1 className="text-xl font-bold text-white">BlockTrace</h1>
+                          <p className="text-xs text-blue-300">Issue Tracker</p>
+                        </div>
+                    </div>
+                    {/* Desktop Navigation */}
+                    <nav className="hidden lg:flex items-center gap-6 text-white text-sm font-medium">
+                        {['home', 'dashboard', 'features', 'contributions', 'community'].map(view => (
+                            <button
+                                key={view}
+                                onClick={() => {setCurrentView(view); setSidebarOpen(false);}}
+                                className={`capitalize hover:text-blue-400 transition-colors ${currentView === view ? 'text-blue-400 border-b-2 border-blue-400' : 'text-white'}`}
+                            >
+                                {view === 'contributions' ? 'My Contributions' : view}
+                            </button>
+                        ))}
+                    </nav>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <Bell className="w-5 h-5 text-white cursor-pointer hover:text-blue-400" />
+                  {currentUser && (
+                    <div className="flex items-center gap-3 bg-white/10 px-4 py-2 rounded-lg">
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                            {currentUser?.avatar}
+                        </div>
+                        <div className="hidden md:block">
+                            <p className="text-sm text-white font-medium">{currentUser?.name}</p>
+                            <p className="text-xs text-blue-300">{currentUser?.role}</p>
+                        </div>
+                    </div>
+                  )}
+                  {currentUser && (
+                    <button
+                      onClick={handleLogout}
+                      className="text-white hover:text-red-400 transition-colors p-2 rounded-full hover:bg-white/10"
+                    >
+                      <LogOut className="w-5 h-5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSidebarOpen(prev => !prev)}
+                    className="lg:hidden text-white p-2 rounded-full hover:bg-white/10"
+                  >
+                    {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            {/* Mobile Sidebar */}
+            {sidebarOpen && (
+                <div className="lg:hidden absolute top-full left-0 w-full bg-slate-900/95 backdrop-blur-md border-t border-white/10 pb-4">
+                    <nav className="flex flex-col gap-2 p-4 text-white text-base">
+                        {['home', 'dashboard', 'features', 'contributions', 'community'].map(view => (
+                            <button
+                                key={view}
+                                onClick={() => {setCurrentView(view); setSidebarOpen(false);}}
+                                className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${currentView === view ? 'bg-blue-600' : 'hover:bg-white/10'}`}
+                            >
+                                {view === 'contributions' ? 'My Contributions' : view}
+                            </button>
+                        ))}
+                    </nav>
+                </div>
+            )}
+          </header>
+          {/* Main Content */}
+          <main className="max-w-7xl mx-auto px-6 py-8">
+            {renderContent()}
+          </main>
+
+          {/* Report/Suggest Modal */}
+          {showReportModal && (
+            <Modal onClose={() => setShowReportModal(false)}>
+              <h2 className="text-2xl font-bold text-white mb-6">{newIssue.type === 'Bug' ? 'Report New Bug' : 'Suggest New Feature'}</h2>
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-white text-sm font-medium mb-2">Type</label>
+                        <select
+                          value={newIssue.type}
+                          onChange={(e) => setNewIssue({...newIssue, type: e.target.value, bounty: e.target.value === 'Bug' ? 5 : 0 })}
+                          className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                        >
+                          <option value="Bug" className="bg-gray-800">Bug</option>
+                          <option value="Feature" className="bg-gray-800">Feature</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-white text-sm font-medium mb-2">Priority</label>
+                        <select
+                          value={newIssue.priority}
+                          onChange={(e) => setNewIssue({...newIssue, priority: e.target.value})}
+                          className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                        >
+                          <option value="Low" className="bg-gray-800">Low</option>
+                          <option value="Medium" className="bg-gray-800">Medium</option>
+                          <option value="High" className="bg-gray-800">High</option>
+                          <option value="Critical" className="bg-gray-800">Critical</option>
+                        </select>
+                    </div>
+                    {/* New Bounty Field - Only for Bugs */}
+                    {newIssue.type === 'Bug' && (
+                        <div>
+                            <label className="block text-white text-sm font-medium mb-2">Bounty (Tokens)</label>
+                            <input
+                                type="number"
+                                value={newIssue.bounty}
+                                onChange={(e) => setNewIssue({...newIssue, bounty: e.target.value})}
+                                min="0"
+                                className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                                placeholder="5"
+                            />
+                        </div>
+                    )}
+                </div>
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">Title</label>
+                  <input
+                    type="text"
+                    value={newIssue.title}
+                    onChange={(e) => setNewIssue({...newIssue, title: e.target.value})}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                    placeholder="Brief description"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">{newIssue.type === 'Bug' ? 'Steps to Reproduce / Description' : 'Detailed Feature Description'}</label>
+                  <textarea
+                    value={newIssue.description}
+                    onChange={(e) => setNewIssue({...newIssue, description: e.target.value})}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400 h-32"
+                    placeholder="Detail the issue or feature"
+                  />
+                </div>
+
+                <p className="text-xs text-gray-500 italic">Screenshot/IPFS saving is simulated (requires full backend).</p>
+
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={handleCreateIssue}
+                    disabled={!newIssue.title || !newIssue.description}
+                    className="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-all disabled:cursor-not-allowed shadow-md"
+                  >
+                    Submit & Record On-Chain (Simulated)
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowReportModal(false);
+                      setNewIssue({ title: '', description: '', type: 'Bug', priority: 'Medium', bounty: 5 });
+                    }}
+                    className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          )}
+
+          {/* Bug Detail Modal */}
+          {selectedIssue && (
+            <Modal onClose={() => setSelectedIssue(null)} large>
+              <div className="space-y-6">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3 mb-3">
+                    <span className="text-blue-400 font-mono">#{selectedIssue.id}</span>
+                    <div className={`${getStatusColor(selectedIssue.status)} px-3 py-1 rounded-full text-xs font-medium text-white`}>
+                      {selectedIssue.status}
+                    </div>
+                    <span className={`${getPriorityColor(selectedIssue.priority)} font-medium text-sm`}>
+                      {selectedIssue.priority} Priority
+                    </span>
+                    <span className="text-gray-400 text-sm font-medium">Type: {selectedIssue.type}</span>
+                    <span className="text-yellow-400 text-sm font-medium flex items-center gap-1"><DollarSign className="w-4 h-4"/> Bounty: {selectedIssue.bounty || 0} Tokens</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-2">{selectedIssue.title}</h2>
+                  <p className="text-gray-300 whitespace-pre-wrap">{selectedIssue.description}</p>
+
+                  <div className="flex items-center gap-4 mt-4">
+                    <button
+                        onClick={() => handleVote(selectedIssue.id)}
+                        className={`flex items-center gap-1 px-4 py-2 rounded-full text-sm font-medium transition-all ${selectedIssue.votedBy.includes(currentUser?.id) ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/10 text-blue-300 hover:bg-white/20'}`}
+                        disabled={!currentUser}
+                    >
+                        <ThumbsUp className="w-4 h-4" />
+                        {selectedIssue.votedBy.includes(currentUser?.id) ? 'Voted' : 'Vote'} ({selectedIssue.votes})
+                    </button>
+                    {selectedIssue.type === 'Feature' && (currentUser?.role === 'Project Manager' || currentUser?.role === 'Admin') && selectedIssue.status === 'Pending' && (
+                        <button
+                            onClick={() => handleUpdateIssueStatus(selectedIssue.id, 'Approved')}
+                            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
+                        >
+                            Approve Feature
+                        </button>
+                    )}
+                    {selectedIssue.status === 'Resolved' && (currentUser?.role === 'Project Manager' || currentUser?.role === 'Admin') && (
+                        <button
+                            onClick={() => handleCloseIssue(selectedIssue.id)}
+                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-md transition-colors"
+                        >
+                            Verify & Close Issue
+                        </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-white/5 p-4 rounded-lg border border-white/10">
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Reported By</p>
+                    <p className="text-white font-medium">{getUserById(selectedIssue.reportedBy)?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Assigned To</p>
+                    <p className="text-white font-medium">
+                      {selectedIssue.assignedTo ? getUserById(selectedIssue.assignedTo)?.name : 'Unassigned'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Created</p>
+                    <p className="text-white text-sm">{selectedIssue.createdAt.toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Last Updated</p>
+                    <p className="text-white text-sm">{selectedIssue.updatedAt.toLocaleDateString()}</p>
+                  </div>
+                </div>
+
+                {(currentUser?.role === 'Project Manager' || currentUser?.role === 'Admin') && (
+                  <div className="bg-white/5 p-4 rounded-lg border border-white/10">
+                    <label className="block text-white text-sm font-medium mb-2">Assign To</label>
+                    <select
+                      onChange={(e) => handleAssignIssue(selectedIssue.id, parseInt(e.target.value))}
+                      className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                      value={selectedIssue.assignedTo || ''}
+                    >
+                      <option value="" className="bg-gray-800">Unassigned</option>
+                      {users.filter(u => u.role === 'Developer').map(user => (
+                        <option key={user.id} value={user.id} className="bg-gray-800">
+                          {user.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5"/> Discussion ({selectedIssue.comments.length})</h3>
+                  <div className="space-y-3 mb-4 max-h-64 overflow-y-auto pr-2">
+                    {selectedIssue.comments.map(comment => (
+                      <div key={comment.id} className="bg-white/5 rounded-lg p-4 border border-white/5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                            {getUserById(comment.userId)?.avatar}
+                          </div>
+                          <span className="text-white font-medium text-sm">{getUserById(comment.userId)?.name}</span>
+                          <span className="text-gray-400 text-xs">{comment.timestamp.toLocaleString()}</span>
+                        </div>
+                        <p className="text-gray-300 text-sm">{comment.text}</p>
+                      </div>
+                    ))}
+                    {selectedIssue.comments.length === 0 && (
+                        <p className="text-gray-500 text-sm italic">No discussion yet. Start a discussion!</p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add a comment (On-chain transaction simulated)..."
+                      className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                      id={`comment-input-${selectedIssue.id}`}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && e.target.value.trim()) {
+                          handleAddComment(selectedIssue.id, e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const input = document.getElementById(`comment-input-${selectedIssue.id}`);
+                        if (input && input.value.trim()) {
+                          handleAddComment(selectedIssue.id, input.value);
+                          input.value = '';
+                        }
+                      }}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium shadow-md transition-colors"
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedIssue(null)}
+                  className="w-full bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg transition-all mt-4"
+                >
+                  Close
+                </button>
+              </div>
+            </Modal>
+          )}
+        </div>
+      );
+    };
+
+    // --- Render the App ---
+    const rootElement = document.getElementById('root');
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(
+        <BlockTrace />
+    );
+
+    </script>
+</body>
+</html>
